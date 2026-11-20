@@ -21,9 +21,9 @@ client.once(Events.ClientReady, async (readyClient) => {
     status: 'online',
     activities: [
       {
-        name: 'ReachDawg',
+        name: 'https://guns.lol/reachdawg',
         type: ActivityType.Listening,
-        details: 'https://guns.lol/reachdawg',
+        details: 'reachdawg',
         state: 'klcselx',
         timestamps: {
           start: 1795203251000,
