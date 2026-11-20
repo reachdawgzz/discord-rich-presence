@@ -8,7 +8,6 @@ const client = new Client({
   ]
 });
 
-const IMAGE_URL = 'https://github.com/reachdawgzz/discord-rich-presence/blob/main/IMG_3818.jpeg?raw=true';
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}!`);
@@ -31,9 +30,9 @@ client.once(Events.ClientReady, async (readyClient) => {
         },
         discordpp::ActivityAssets assets;
     assets.SetLargeImage("https://github.com/reachdawgzz/discord-rich-presence/blob/main/IMG_3818.jpeg?raw=true");
-    assets.SetLargeText("Enchanted Forest");
+    assets.SetLargeText("ReachDawg");
     assets.SetSmallText("Level 10");
-    activity.SetAssets(assets);
+     assets.SetAssets(assets);
         }
       }
     ]
