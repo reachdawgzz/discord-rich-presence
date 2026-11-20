@@ -29,9 +29,11 @@ client.once(Events.ClientReady, async (readyClient) => {
           start: 1795203251000,
           end: 1903203251000
         },
-        assets: {
-          largeImage: IMAGE_URL,
-          largeText: 'ReachDawg'
+        discordpp::ActivityAssets assets;
+    assets.SetLargeImage("https://github.com/reachdawgzz/discord-rich-presence/blob/main/IMG_3818.jpeg?raw=true");
+    assets.SetLargeText("Enchanted Forest");
+    assets.SetSmallText("Level 10");
+    activity.SetAssets(assets);
         }
       }
     ]
