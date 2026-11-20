@@ -1,14 +1,8 @@
 const { Client, GatewayIntentBits, ActivityType, Events } = require('discord.js');
-const { startVoiceStay } = require('./voiceStay');
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates
-  ]
-});
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-client.once(Events.ClientReady, async (readyClient) => {
+client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}!`);
 
   readyClient.user.setPresence({
@@ -20,8 +14,6 @@ client.once(Events.ClientReady, async (readyClient) => {
       }
     ]
   });
-
-  await startVoiceStay(readyClient);
 });
 
 client.login(process.env.BOT_TOKEN);
