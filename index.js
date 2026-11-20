@@ -9,8 +9,14 @@ client.once('ready', () => {
     status: 'online',
     activities: [
       {
-        name: 'On an adventure',
-        type: ActivityType.Listening
+        name: 'ReachDawg',
+        type: ActivityType.Listening,
+        details: 'ReachDawg',
+        state: 'klcselx',
+        timestamps: {
+          start: 1795203251000,
+          end: 1903203251000
+        }
       }
     ]
   });
