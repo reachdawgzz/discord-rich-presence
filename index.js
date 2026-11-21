@@ -346,7 +346,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       new ButtonBuilder()
         .setLabel('GitHub')
         .setStyle(ButtonStyle.Link)
-        .setURL('https://github.com/reachdawgzz/discord-rich-presence')
+        .setURL('https://pastebin.com/bkwqb0by')
     );
 
     await interaction.reply({ embeds: [embed], components: [row] });
