@@ -1,4 +1,13 @@
-const { Client, GatewayIntentBits, ActivityType, Events } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  ActivityType,
+  Events,
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require('discord.js');
 const { startVoiceStay } = require('./voiceStay');
 
 const client = new Client({
@@ -38,7 +47,31 @@ client.once(Events.ClientReady, async (readyClient) => {
     ]
   });
 
+  const linkCommand = new SlashCommandBuilder()
+    .setName('link')
+    .setDescription('Get ReachDawg link');
+
+  await readyClient.application.commands.set([linkCommand]);
+
   await startVoiceStay(readyClient);
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'link') {
+    const button = new ButtonBuilder()
+      .setLabel('Webs')
+      .setURL('https://guns.lol/reachdawg')
+      .setStyle(ButtonStyle.Link);
+
+    const row = new ActionRowBuilder().addComponents(button);
+
+    await interaction.reply({
+      content: 'Check out my profile:',
+      components: [row]
+    });
+  }
 });
 
 client.login(process.env.BOT_TOKEN);
