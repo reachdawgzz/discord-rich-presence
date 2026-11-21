@@ -298,7 +298,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       new ButtonBuilder()
         .setLabel('SETUP BY REACH')
         .setStyle(ButtonStyle.Link)
-        .setURL('')
+        .setURL('https://discord.gg/y44kY9yZ5V')
     );
 
     await interaction.reply({ embeds: [embed], components: [row] });
