@@ -61,13 +61,13 @@ Rules for how you talk:
   - Never say "As an AI", "I'm an AI", or lecture anyone.
 `.trim();
 
-// Stores the last 8 messages per channel so the AI remembers the conversation
+// Stores the last 5 messages per channel (saves daily tokens while keeping context)
 const channelMemory = new Map();
 
 function addToMemory(channelId, role, content) {
   const history = channelMemory.get(channelId) || [];
-  history.push({ role, content: content.slice(0, 1000) });
-  if (history.length > 8) history.shift();
+  history.push({ role, content: content.slice(0, 600) });
+  if (history.length > 5) history.shift();
   channelMemory.set(channelId, history);
 }
 
@@ -123,7 +123,7 @@ async function getAvailableGroqModels(apiKey) {
   ])].filter(Boolean);
 }
 
-// Groq AI Chat Helper with Human Personality + Memory
+// Groq AI Chat Helper with Auto-Failover on Rate Limits (429)
 async function askAI(channelId, username, prompt, previousBotMessage = null) {
   const apiKey = (process.env.AI_API_KEY || '').trim();
   const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
@@ -141,7 +141,7 @@ async function askAI(channelId, username, prompt, previousBotMessage = null) {
   const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...history];
 
   if (previousBotMessage && !history.some(m => m.content === previousBotMessage)) {
-    messages.push({ role: 'assistant', content: previousBotMessage.slice(0, 1000) });
+    messages.push({ role: 'assistant', content: previousBotMessage.slice(0, 600) });
   }
 
   const userMessage = `${username}: ${prompt}`;
@@ -149,7 +149,8 @@ async function askAI(channelId, username, prompt, previousBotMessage = null) {
 
   let lastError = 'Unknown AI error';
 
-  for (const model of modelsToTry.slice(0, 5)) {
+  // Try up to 8 models so if one hits daily token limit (429), it switches to another model
+  for (const model of modelsToTry.slice(0, 8)) {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -160,7 +161,7 @@ async function askAI(channelId, username, prompt, previousBotMessage = null) {
         model,
         messages,
         temperature: 0.85,
-        max_tokens: 150
+        max_tokens: 130
       })
     });
 
@@ -175,9 +176,10 @@ async function askAI(channelId, username, prompt, previousBotMessage = null) {
     }
 
     const errText = await res.text();
-    lastError = `HTTP ${res.status} (${model}): ${errText.slice(0, 250)}`;
+    lastError = `HTTP ${res.status} (${model}): ${errText.slice(0, 220)}`;
 
-    if (res.status !== 404 && res.status !== 400) {
+    // Fail over to the next model on 429 (rate limit), 404 (not found), or 400 (model error)
+    if (![429, 404, 400].includes(res.status)) {
       throw new Error(lastError);
     }
   }
@@ -296,9 +298,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setStyle(ButtonStyle.Link)
         .setURL('https://guns.lol/reachdawg'),
       new ButtonBuilder()
-        .setLabel('SETUP BY REACH')
+        .setLabel('GitHub')
         .setStyle(ButtonStyle.Link)
-        .setURL('https://discord.gg/y44kY9yZ5V')
+        .setURL('https://github.com/reachdawgzz/discord-rich-presence')
     );
 
     await interaction.reply({ embeds: [embed], components: [row] });
