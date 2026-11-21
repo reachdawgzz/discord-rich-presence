@@ -24,7 +24,7 @@ const client = new Client({
 });
 
 const GUILD_ID = '907163834597376080';
-const OWNER_ID = '1058688233782902846'; 
+const OWNER_ID = '1058688233782902846'; // Optional: paste your Discord User ID
 const IMAGE_URL = 'https://raw.githubusercontent.com/reachdawgzz/discord-rich-presence/main/IMG_3818.jpeg';
 const AI_PREFIX = '~';
 
@@ -56,7 +56,7 @@ const commands = [
     .setDescription('Check if the bot is online and view response speed')
 ].map(cmd => cmd.toJSON());
 
-// Fetch active chat models directly from Groq so it never fails on outdated model names
+// Fetch active chat models directly from Groq
 async function getAvailableGroqModels(apiKey) {
   const res = await fetch('https://api.groq.com/openai/v1/models', {
     headers: { Authorization: `Bearer ${apiKey}` }
@@ -72,7 +72,6 @@ async function getAvailableGroqModels(apiKey) {
     .map(m => m.id)
     .filter(id => !id.includes('whisper') && !id.includes('guard') && !id.includes('tts'));
 
-  // Prefer Llama or Qwen/Gemma chat models first
   const preferred = allIds.filter(id => /llama|qwen|gemma|mixtral|deepseek/i.test(id));
   return [...new Set([
     (process.env.AI_MODEL || '').trim(),
@@ -81,19 +80,28 @@ async function getAvailableGroqModels(apiKey) {
   ])].filter(Boolean);
 }
 
-// Groq AI Chat Helper
-async function askAI(prompt) {
+// Groq AI Chat Helper (supports optional previous bot message for reply context)
+async function askAI(prompt, previousBotMessage = null) {
   const apiKey = (process.env.AI_API_KEY || '').trim();
   const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
 
   if (!apiKey) {
-    return 'AI is not configured yet. Add `AI_API_KEY` in your Railway Variables tab.';
+    throw new Error('AI is not configured yet. Add `AI_API_KEY` in Railway Variables.');
   }
 
   const modelsToTry = await getAvailableGroqModels(apiKey);
   if (!modelsToTry.length) {
     throw new Error('No active chat models found on your Groq account.');
   }
+
+  const messages = [
+    { role: 'system', content: 'You are a helpful, concise Discord assistant.' }
+  ];
+
+  if (previousBotMessage) {
+    messages.push({ role: 'assistant', content: previousBotMessage.slice(0, 1500) });
+  }
+  messages.push({ role: 'user', content: prompt });
 
   let lastError = 'Unknown AI error';
 
@@ -106,10 +114,7 @@ async function askAI(prompt) {
       },
       body: JSON.stringify({
         model,
-        messages: [
-          { role: 'system', content: 'You are a helpful, concise Discord assistant.' },
-          { role: 'user', content: prompt }
-        ],
+        messages,
         max_tokens: 400
       })
     });
@@ -122,7 +127,6 @@ async function askAI(prompt) {
     const errText = await res.text();
     lastError = `HTTP ${res.status} (${model}): ${errText.slice(0, 250)}`;
 
-    // Stop immediately on auth/rate errors; only try next model on 400/404 model issues
     if (res.status !== 404 && res.status !== 400) {
       throw new Error(lastError);
     }
@@ -177,21 +181,47 @@ client.once(Events.ClientReady, async (readyClient) => {
   await startVoiceStay(readyClient);
 });
 
-// Handle ~ Prefix AI Chat (Open to everyone)
+// Handle ~ Prefix AND Direct Replies to the Bot
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
-  if (!message.content.startsWith(AI_PREFIX)) return;
 
-  const prompt = message.content.slice(AI_PREFIX.length).trim();
+  const startsWithPrefix = message.content.startsWith(AI_PREFIX);
+  let repliedToBot = false;
+  let previousBotText = null;
+
+  // Check if the user used Discord's "Reply" button on one of this bot's messages
+  if (!startsWithPrefix && message.reference?.messageId) {
+    try {
+      const referencedMsg = await message.fetchReference();
+      if (referencedMsg.author.id === client.user.id) {
+        repliedToBot = true;
+        previousBotText = referencedMsg.content;
+      }
+    } catch {
+      // Referenced message was deleted or inaccessible — ignore
+    }
+  }
+
+  if (!startsWithPrefix && !repliedToBot) return;
+
+  const prompt = startsWithPrefix
+    ? message.content.slice(AI_PREFIX.length).trim()
+    : message.content.trim();
+
   if (!prompt) return;
 
   await message.channel.sendTyping();
   try {
-    const answer = await askAI(prompt);
+    const answer = await askAI(prompt, previousBotText);
     await message.reply(answer.slice(0, 1900));
   } catch (err) {
     console.error('[AI Error]:', err);
-    await message.reply(`AI Error: \`${err.message}\``);
+    const errReply = await message.reply(`AI Error: \`${err.message}\``).catch(() => null);
+    if (errReply) {
+      setTimeout(() => {
+        errReply.delete().catch(() => {});
+      }, 5000);
+    }
   }
 });
 
