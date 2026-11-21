@@ -296,9 +296,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setStyle(ButtonStyle.Link)
         .setURL('https://guns.lol/reachdawg'),
       new ButtonBuilder()
-        .setLabel('GitHub')
+        .setLabel('SETUP BY REACH')
         .setStyle(ButtonStyle.Link)
-        .setURL('https://github.com/reachdawgzz/discord-rich-presence')
+        .setURL('')
     );
 
     await interaction.reply({ embeds: [embed], components: [row] });
