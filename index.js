@@ -24,17 +24,17 @@ const client = new Client({
 });
 
 const GUILD_ID = '907163834597376080';
-const OWNER_ID = 'YOUR_DISCORD_USER_ID'; // <-- Paste your Discord User ID here
+const OWNER_ID = 'YOUR_DISCORD_USER_ID'; // Optional: paste your Discord User ID
 const IMAGE_URL = 'https://raw.githubusercontent.com/reachdawgzz/discord-rich-presence/main/IMG_3818.jpeg';
 const AI_PREFIX = '~';
 
-// Helper to check if the user is YOU or an Administrator
+// Check if user is Bot Owner or Server Admin
 function isOwnerOrAdmin(interaction) {
   if (interaction.user.id === OWNER_ID) return true;
   return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false;
 }
 
-// Define Slash Commands
+// Slash Commands (/kick, /links, /ping)
 const commands = [
   new SlashCommandBuilder()
     .setName('kick')
@@ -56,44 +56,60 @@ const commands = [
     .setDescription('Check if the bot is online and view response speed')
 ].map(cmd => cmd.toJSON());
 
-// Helper function for AI Chat
+// Groq AI Chat Helper
 async function askAI(prompt) {
-  const apiKey = process.env.AI_API_KEY;
-  const endpoint = process.env.AI_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
-  const model = process.env.AI_MODEL || 'gpt-4o-mini';
+  const apiKey = (process.env.AI_API_KEY || '').trim();
+  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+  const modelsToTry = [
+    (process.env.AI_MODEL || '').trim(),
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant'
+  ].filter(Boolean);
 
   if (!apiKey) {
-    return 'AI is not configured yet. Add `AI_API_KEY` in your Railway Variables tab to enable `~` AI chat.';
+    return 'AI is not configured yet. Add `AI_API_KEY` in your Railway Variables tab.';
   }
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: 'You are a helpful, concise Discord assistant.' },
-        { role: 'user', content: prompt }
-      ],
-      max_tokens: 400
-    })
-  });
+  let lastError = 'Unknown AI error';
 
-  if (!res.ok) {
+  for (const model of modelsToTry) {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: 'You are a helpful, concise Discord assistant.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 400
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content?.trim() || 'No response returned from AI.';
+    }
+
     const errText = await res.text();
-    throw new Error(`AI API error (${res.status}): ${errText.slice(0, 200)}`);
+    lastError = `HTTP ${res.status} (${model}): ${errText.slice(0, 250)}`;
+
+    // Retry next model only if model was not found
+    if (res.status !== 404) {
+      throw new Error(lastError);
+    }
   }
 
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content?.trim() || 'No response returned from AI.';
+  throw new Error(lastError);
 }
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}!`);
 
+  // 1. Register Slash Commands
   try {
     const rest = new REST().setToken(process.env.BOT_TOKEN);
     await rest.put(
@@ -105,10 +121,12 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.error('Failed to register slash commands:', err);
   }
 
+  // 2. Update Bot About Me
   await readyClient.application.edit({
     description: 'run by reach https://guns.lol/reachdawg'
   });
 
+  // 3. Set Bot Presence
   readyClient.user.setPresence({
     status: 'online',
     activities: [
@@ -130,10 +148,11 @@ client.once(Events.ClientReady, async (readyClient) => {
     ]
   });
 
+  // 4. Join & Stay in Voice Channel
   await startVoiceStay(readyClient);
 });
 
-// ~ AI Chat (Open to everyone)
+// Handle ~ Prefix AI Chat (Open to everyone)
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
   if (!message.content.startsWith(AI_PREFIX)) return;
@@ -147,15 +166,14 @@ client.on(Events.MessageCreate, async (message) => {
     await message.reply(answer.slice(0, 1900));
   } catch (err) {
     console.error('[AI Error]:', err);
-    await message.reply('Something went wrong talking to the AI service.');
+    await message.reply(`AI Error: \`${err.message}\``);
   }
 });
 
-// Slash Commands
+// Handle Slash Commands (/kick, /links, /ping)
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // Public commands (Everyone)
   if (interaction.commandName === 'ping') {
     await interaction.reply(`Pong! Latency is **${client.ws.ping}ms**.`);
   }
@@ -181,7 +199,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await interaction.reply({ embeds: [embed], components: [row] });
   }
 
-  // Restricted commands (You or Admins only)
   if (interaction.commandName === 'kick') {
     if (!isOwnerOrAdmin(interaction)) {
       return interaction.reply({ content: 'Only the bot owner or server admins can use this command.', ephemeral: true });
