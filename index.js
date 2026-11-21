@@ -56,23 +56,48 @@ const commands = [
     .setDescription('Check if the bot is online and view response speed')
 ].map(cmd => cmd.toJSON());
 
+// Fetch active chat models directly from Groq so it never fails on outdated model names
+async function getAvailableGroqModels(apiKey) {
+  const res = await fetch('https://api.groq.com/openai/v1/models', {
+    headers: { Authorization: `Bearer ${apiKey}` }
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`HTTP ${res.status} fetching models: ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const allIds = (data?.data || [])
+    .map(m => m.id)
+    .filter(id => !id.includes('whisper') && !id.includes('guard') && !id.includes('tts'));
+
+  // Prefer Llama or Qwen/Gemma chat models first
+  const preferred = allIds.filter(id => /llama|qwen|gemma|mixtral|deepseek/i.test(id));
+  return [...new Set([
+    (process.env.AI_MODEL || '').trim(),
+    ...preferred,
+    ...allIds
+  ])].filter(Boolean);
+}
+
 // Groq AI Chat Helper
 async function askAI(prompt) {
   const apiKey = (process.env.AI_API_KEY || '').trim();
   const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-  const modelsToTry = [
-    (process.env.AI_MODEL || '').trim(),
-    'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant'
-  ].filter(Boolean);
 
   if (!apiKey) {
     return 'AI is not configured yet. Add `AI_API_KEY` in your Railway Variables tab.';
   }
 
+  const modelsToTry = await getAvailableGroqModels(apiKey);
+  if (!modelsToTry.length) {
+    throw new Error('No active chat models found on your Groq account.');
+  }
+
   let lastError = 'Unknown AI error';
 
-  for (const model of modelsToTry) {
+  for (const model of modelsToTry.slice(0, 5)) {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -97,8 +122,8 @@ async function askAI(prompt) {
     const errText = await res.text();
     lastError = `HTTP ${res.status} (${model}): ${errText.slice(0, 250)}`;
 
-    // Retry next model only if model was not found
-    if (res.status !== 404) {
+    // Stop immediately on auth/rate errors; only try next model on 400/404 model issues
+    if (res.status !== 404 && res.status !== 400) {
       throw new Error(lastError);
     }
   }
