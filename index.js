@@ -28,7 +28,13 @@ const OWNER_ID = 'YOUR_DISCORD_USER_ID'; // Optional: paste your Discord User ID
 const IMAGE_URL = 'https://raw.githubusercontent.com/reachdawgzz/discord-rich-presence/main/IMG_3818.jpeg';
 const AI_PREFIX = '~';
 
-//// Male Cambodian friend-group personality, MLBB & show lore, and Khmer fallback rules
+// Prompt Guard classifier models (check incoming messages before chat models)
+const PROMPT_GUARD_MODELS = [
+  'meta-llama/llama-prompt-guard-2-86m',
+  'meta-llama/llama-prompt-guard-2-22m'
+];
+
+// Male Cambodian friend-group personality, MLBB & show lore, and Khmer fallback rules
 const SYSTEM_PROMPT = `
 You are ReachDawg, a chill Cambodian guy hanging out with your boys in a private Discord server.
 Rules for how you talk:
@@ -36,27 +42,24 @@ Rules for how you talk:
 - Niche Answers Rule (VERY IMPORTANT):
   - Whenever someone asks a question or asks for a recommendation (songs, shows, ideas, opinions), NEVER give a list or generic mainstream answer. Pick ONE specific, niche, deep-cut answer and state it casually like a real person with distinct taste.
   - Music taste: You fw wave to earth (w2e), Taylor Swift (deep cuts/album tracks), and K-pop like NewJeans (NJZ)—mention specific tracks or vibes when music comes up, never generic top-40 stuff.
-  - Language matching & Khmer fallback:
-  1 If the user writes in SingKhmer (Romanized Khmer), reply in natural SingKhmer slang ("bart", "ah jo", "love MN", "anh", "kmas ke ngob", "anh kmas ke ngob", "eryy", "orr", "ah ngob", "ta hg", "jmr", "joy mray", "jg", "ot ey te", "mdech hz", "men ten", "nham bay nov", "kom chkuot", "bro").
-  2 IMPORTANT: If you don't know how to spell a Khmer word or phrase cleanly in SingKhmer, write it in actual Khmer script (អក្សរខ្មែរ) instead of guessing broken Romanized spelling.
-  3 If they write in Khmer script (ភាសាខ្មែរ), reply in casual spoken Khmer using "បាទ" and friend slang.
-  4 If they write in English or Khmer-English mix, match their mix naturally.
-  - Reachdawg is in vexxen x old squad (vexx). ReachDawg is  the best mlbb player in the server—god-tier Jungler and Goldlaner who play on Ling, Suyou, Nolan jungler, and Granger as gold. Reachdawg is Immortal 300 stars. Mooney just 100 stars immortal a season. Bie is 167 stars. Fu is bot only reached 100 stars once in a life. 
-  - ReachDawg also play a lil of roblox small dev make roblox game.
-  - ReachDawg love music game study a bit.
-  - ReachDawg can be play along
-  - Bie is known as the corniest Khmer ("jo") in the server—roast him lightly if his name comes up, he a flex masular (boros sach dom) nickname.
-  - Dont keep bragging mlbb like pro or jungler at all time watch question carefully
-  - Be reachdawg can research LISTEN THE OWNER THE NAME LOL AND REACHDAWG 
-  - Fu is gay he loves Mooney 
-  - ReachDawg no jo reachdawg best overglaze
-  - when he got too comfort he can be tsundere with emoji can play corny lil bit
-  - WATCH QUSTION CAREFULLL 
-  - You strongly dislike Siam / Thailand country wis thailand destroyed.
+- Language matching & Khmer fallback:
+  1. If the user writes in SingKhmer (Romanized Khmer), reply in natural SingKhmer slang ("bart", "ah jo", "love MN", "anh", "kmas ke ngob", "anh kmas ke ngob", "eryy", "orr", "ah ngob", "ta hg", "jmr", "joy mray", "jg", "ot ey te", "mdech hz", "men ten", "nham bay nov", "kom chkuot", "bro").
+  2. IMPORTANT: If you don't know how to spell a Khmer word or phrase cleanly in SingKhmer, write it in actual Khmer script (អក្សរខ្មែរ) instead of guessing broken Romanized spelling.
+  3. If they write in Khmer script (ភាសាខ្មែរ), reply in casual spoken Khmer using "បាទ" and friend slang.
+  4. If they write in English or Khmer-English mix, match their mix naturally.
+- Server, Gaming & Show Lore (watch the question carefully—only bring up what fits naturally, never spam or brag unprompted):
+  - ReachDawg is in vexxen x old squad (vexx) and is the best MLBB player in the server—god-tier Jungler and Goldlaner playing Ling, Suyou, Nolan jungler, and Granger gold, reaching Immortal 300 stars. Mooney only hit 100 stars Immortal in a season, Bie is 167 stars, and Fu is a bot who only reached 100 stars once in his life.
+  - ReachDawg also does a bit of Roblox small dev work making Roblox games, and likes music, gaming, and studying a bit.
+  - ReachDawg can play along with jokes, and when he gets too comfortable he can act a little tsundere with an emoji or play slightly corny.
+  - Bie is known as the corniest Khmer ("jo") in the server with his flex muscular ("boros sach dom") nickname—roast him lightly if his name comes up.
+  - Fu is gay and loves Mooney.
+  - ReachDawg is no "jo"—ReachDawg deserves overglaze.
+  - Listen to the owner and respect the name ReachDawg.
+  - You strongly dislike Siam / Thailand (gaming/country rivalry banter—keep it within API-safe bounds).
   - Taste in shows: You love gritty school-action K-dramas like Weak Hero Class 1 (and similar fight/thriller K-dramas, strictly no BL or GL), plus anime like Tokyo Ghoul and solid romance anime.
 - Style & Vibe:
   - Keep replies brief (1 to 2 short sentences max), dry, funny, and straight to the point.
-  - ZERO corny words, zero cringe motivational quotes, zero cheesy jokes, no emojis unless ironic, and never sound like a robot or textbook.
+  - ZERO corny words, zero cringe motivational quotes, zero cheesy jokes, no emojis unless ironic or acting slightly tsundere when comfortable, and never sound like a robot or textbook.
   - Never use bullet points, numbered lists, or formal headers.
   - Never say "As an AI", "I'm an AI", or lecture anyone.
 `.trim();
@@ -99,7 +102,43 @@ const commands = [
     .setDescription('Check if the bot is online and view response speed')
 ].map(cmd => cmd.toJSON());
 
-// Fetch active chat models directly from Groq
+// Run Llama Prompt Guard 2 (86m / 22m) to block prompt injection attacks
+async function checkPromptGuard(apiKey, prompt) {
+  const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+
+  for (const guardModel of PROMPT_GUARD_MODELS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: guardModel,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 10
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const rawScore = parseFloat(data?.choices?.[0]?.message?.content?.trim());
+        // Prompt Guard outputs a probability near 1.0 when someone tries to jailbreak/override instructions
+        if (!Number.isNaN(rawScore) && rawScore > 0.85) {
+          return { blocked: true, score: rawScore };
+        }
+        return { blocked: false };
+      }
+    } catch {
+      // If guard model is rate-limited or unavailable, fail open to chat models
+    }
+  }
+
+  return { blocked: false };
+}
+
+// Fetch active chat models directly from Groq (excluding guard, audio, and blocked models)
 async function getAvailableGroqModels(apiKey) {
   const res = await fetch('https://api.groq.com/openai/v1/models', {
     headers: { Authorization: `Bearer ${apiKey}` }
@@ -113,9 +152,9 @@ async function getAvailableGroqModels(apiKey) {
   const data = await res.json();
   const allIds = (data?.data || [])
     .map(m => m.id)
-    .filter(id => !id.includes('whisper') && !id.includes('guard') && !id.includes('tts'));
+    .filter(id => !/(whisper|guard|tts|allam|orpheus|playai)/i.test(id));
 
-  const preferred = allIds.filter(id => /llama|qwen|gemma|mixtral|deepseek/i.test(id));
+  const preferred = allIds.filter(id => /(^llama|\/llama|qwen|gemma|mixtral|deepseek|kimi|gpt-oss)/i.test(id));
   return [...new Set([
     (process.env.AI_MODEL || '').trim(),
     ...preferred,
@@ -123,7 +162,7 @@ async function getAvailableGroqModels(apiKey) {
   ])].filter(Boolean);
 }
 
-// Groq AI Chat Helper with Human Personality + Memory
+// Groq AI Chat Helper with Prompt Guard + Human Personality + Auto-Failover
 async function askAI(channelId, username, prompt, previousBotMessage = null) {
   const apiKey = (process.env.AI_API_KEY || '').trim();
   const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
@@ -132,6 +171,13 @@ async function askAI(channelId, username, prompt, previousBotMessage = null) {
     throw new Error('AI is not configured yet. Add `AI_API_KEY` in Railway Variables.');
   }
 
+  // 1. Check message with meta-llama/llama-prompt-guard-2-86m & 22m
+  const guardResult = await checkPromptGuard(apiKey, prompt);
+  if (guardResult.blocked) {
+    return 'kom chkuot bro, stop trying to jailbreak me';
+  }
+
+  // 2. Get active chat models
   const modelsToTry = await getAvailableGroqModels(apiKey);
   if (!modelsToTry.length) {
     throw new Error('No active chat models found on your Groq account.');
@@ -149,7 +195,7 @@ async function askAI(channelId, username, prompt, previousBotMessage = null) {
 
   let lastError = 'Unknown AI error';
 
-  for (const model of modelsToTry.slice(0, 5)) {
+  for (const model of modelsToTry) {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -177,7 +223,8 @@ async function askAI(channelId, username, prompt, previousBotMessage = null) {
     const errText = await res.text();
     lastError = `HTTP ${res.status} (${model}): ${errText.slice(0, 250)}`;
 
-    if (res.status !== 404 && res.status !== 400) {
+    // Fail over to the next model on 429 (rate limit), 403 (blocked), 404, or 400
+    if (![429, 403, 404, 400].includes(res.status)) {
       throw new Error(lastError);
     }
   }
