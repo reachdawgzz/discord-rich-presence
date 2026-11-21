@@ -24,7 +24,7 @@ const client = new Client({
 });
 
 const GUILD_ID = '907163834597376080';
-const OWNER_ID = 'YOUR_DISCORD_USER_ID'; // Optional: paste your Discord User ID
+const OWNER_ID = '1058688233782902846'; // Optional: paste your Discord User ID
 const IMAGE_URL = 'https://raw.githubusercontent.com/reachdawgzz/discord-rich-presence/main/IMG_3818.jpeg';
 const AI_PREFIX = '~';
 
