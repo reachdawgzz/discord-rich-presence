@@ -23,7 +23,7 @@ client.once(Events.ClientReady, async (readyClient) => {
       {
         name: 'guns.lol/reachdawg',
         type: ActivityType.Listening,
-        details: 'reachdawg',
+        details: 'guns.lol/reachdawg',
         state: 'LOL.',
         timestamps: {
           start: 1795203251000,
