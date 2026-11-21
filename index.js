@@ -28,6 +28,27 @@ const OWNER_ID = '1058688233782902846'; // Optional: paste your Discord User ID
 const IMAGE_URL = 'https://raw.githubusercontent.com/reachdawgzz/discord-rich-presence/main/IMG_3818.jpeg';
 const AI_PREFIX = '~';
 
+// Customize your bot's human personality here!
+const SYSTEM_PROMPT = `
+You are ReachDawg, a chill, witty human hanging out in a Discord server.
+Rules for how you talk:
+- Talk like a real person texting on Discord: casual, natural, mostly lowercase, short sentences.
+- Keep replies brief (1 to 3 sentences max unless someone specifically asks for a long explanation).
+- Never use bullet points, numbered lists, or formal headers.
+- Never say "As an AI", "I'm an AI assistant", or "How can I help you today?".
+- Match the user's energy and humor. If they're joking, joke back. Don't be overly polite or robotic.
+`.trim();
+
+// Stores the last 8 messages per channel so the AI remembers the conversation
+const channelMemory = new Map();
+
+function addToMemory(channelId, role, content) {
+  const history = channelMemory.get(channelId) || [];
+  history.push({ role, content: content.slice(0, 1000) });
+  if (history.length > 8) history.shift();
+  channelMemory.set(channelId, history);
+}
+
 // Check if user is Bot Owner or Server Admin
 function isOwnerOrAdmin(interaction) {
   if (interaction.user.id === OWNER_ID) return true;
@@ -80,8 +101,8 @@ async function getAvailableGroqModels(apiKey) {
   ])].filter(Boolean);
 }
 
-// Groq AI Chat Helper (supports optional previous bot message for reply context)
-async function askAI(prompt, previousBotMessage = null) {
+// Groq AI Chat Helper with Human Personality + Memory
+async function askAI(channelId, username, prompt, previousBotMessage = null) {
   const apiKey = (process.env.AI_API_KEY || '').trim();
   const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -94,14 +115,15 @@ async function askAI(prompt, previousBotMessage = null) {
     throw new Error('No active chat models found on your Groq account.');
   }
 
-  const messages = [
-    { role: 'system', content: 'You are a helpful, concise Discord assistant.' }
-  ];
+  const history = channelMemory.get(channelId) || [];
+  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...history];
 
-  if (previousBotMessage) {
-    messages.push({ role: 'assistant', content: previousBotMessage.slice(0, 1500) });
+  if (previousBotMessage && !history.some(m => m.content === previousBotMessage)) {
+    messages.push({ role: 'assistant', content: previousBotMessage.slice(0, 1000) });
   }
-  messages.push({ role: 'user', content: prompt });
+
+  const userMessage = `${username}: ${prompt}`;
+  messages.push({ role: 'user', content: userMessage });
 
   let lastError = 'Unknown AI error';
 
@@ -115,13 +137,20 @@ async function askAI(prompt, previousBotMessage = null) {
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: 400
+        temperature: 0.85,
+        max_tokens: 180
       })
     });
 
     if (res.ok) {
       const data = await res.json();
-      return data?.choices?.[0]?.message?.content?.trim() || 'No response returned from AI.';
+      const reply = data?.choices?.[0]?.message?.content?.trim() || 'idk what to say lol';
+
+      // Save both messages into channel memory
+      addToMemory(channelId, 'user', userMessage);
+      addToMemory(channelId, 'assistant', reply);
+
+      return reply;
     }
 
     const errText = await res.text();
@@ -189,7 +218,6 @@ client.on(Events.MessageCreate, async (message) => {
   let repliedToBot = false;
   let previousBotText = null;
 
-  // Check if the user used Discord's "Reply" button on one of this bot's messages
   if (!startsWithPrefix && message.reference?.messageId) {
     try {
       const referencedMsg = await message.fetchReference();
@@ -198,7 +226,7 @@ client.on(Events.MessageCreate, async (message) => {
         previousBotText = referencedMsg.content;
       }
     } catch {
-      // Referenced message was deleted or inaccessible — ignore
+      // Ignore deleted/inaccessible references
     }
   }
 
@@ -212,7 +240,8 @@ client.on(Events.MessageCreate, async (message) => {
 
   await message.channel.sendTyping();
   try {
-    const answer = await askAI(prompt, previousBotText);
+    const displayName = message.member?.displayName || message.author.username;
+    const answer = await askAI(message.channel.id, displayName, prompt, previousBotText);
     await message.reply(answer.slice(0, 1900));
   } catch (err) {
     console.error('[AI Error]:', err);
